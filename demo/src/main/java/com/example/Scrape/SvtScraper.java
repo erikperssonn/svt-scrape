@@ -16,6 +16,8 @@ import com.example.utils.Utils;
 
 public class SvtScraper {
 
+    boolean debugging = true;
+
     private final WebDriver driver;
     
     private final String UTRIKES_URL = "https://www.svt.se/nyheter/utrikes/";
@@ -34,15 +36,17 @@ public class SvtScraper {
 
         this.driver = new ChromeDriver(options);
 
+        //String chromeDriverVersion = (String) ((HasCapabilities) driver).getCapabilities().getCapability("chrome").toString();
+        //System.out.println("ChromeDriver Version: " + chromeDriverVersion);
+
     }
 
     public void run(){
-        declineCookies();
         scrapeWebPage(INRIKES_URL);
     }
-
+    
     private void declineCookies(){
-        WebElement declineButton = Utils.tryToScrape("body > div.CookieConsent__root___G7vry > div > div.CookieConsent__footer___o4D6 > button:nth-child(2)",
+        WebElement declineButton = Utils.tryToScrapeXPath("/html/body/div[3]/div/div[3]/button[2]",
                                                     2000L,
                                                     this.driver);
         declineButton.click();
@@ -50,30 +54,36 @@ public class SvtScraper {
 
     private void scrapeWebPage (String url){
         this.driver.get(url);
-        getTitleHrefMap();
+        declineCookies();
+        getTitleHrefMap(url);
     }
 
-    private void getTitleHrefMap(){
+    private void getTitleHrefMap(String baseUrl){
         List<WebElement> articles = driver.findElements(By.cssSelector("#innehall > div > section > ul > li:nth-child(n) > article > a"));
         for(WebElement article : articles){
-            String articleUrl = article.getAttribute("href");
-            if(!hrefSet.contains(articleUrl)){
+            String articleUrl = article.getDomAttribute("href");
+            //sortera bort artiklar man redan har, samt länkar till externa hemsidor
+            if(!hrefSet.contains(articleUrl) && !articleUrl.contains("https")){
                 scrapeArticle(articleUrl);
+                this.driver.get(baseUrl);
             }
         }
     }
 
     private void scrapeArticle(String articleUrl){
-        this.driver.get(articleUrl);
+        Utils.debugg(articleUrl, "Scrape article", debugging);
 
-        final WebElement titleElement = driver.findElement(By.cssSelector("#innehall > div > article > h1"));
+        String completeArticleUrl = "https://www.svt.se/" + articleUrl;
+        this.driver.get(completeArticleUrl);
+
+        final WebElement titleElement = Utils.tryToScrapeCSS("#innehall > div > article > h1", 2000L, this.driver);
         final String title = titleElement.getText();
 
-        final WebElement subtitlesElement = driver.findElement(By.cssSelector("#innehall > div > article > div.Lead__root___PJ6pA"));
+        final WebElement subtitlesElement = Utils.tryToScrapeCSS("#innehall > div > article > div.Lead__root___PJ6pA", 2000L, this.driver);
         final String subtitle = subtitlesElement.getText();
 
         final StringBuilder breadtextBuilder = new StringBuilder();
-        final List<WebElement> breadtextElements = driver.findElements(By.cssSelector("#innehall > div > article > div.TextArticle__main___zH7wd > div.Stack__root___W5SPP.TextArticle__body___SZ6MK.Stack__gap-14___zt026.Stack__sm-gap-16___D6LK8 > div.InlineText_root_g8u-1"));
+        final List<WebElement> breadtextElements = driver.findElements(By.cssSelector("#innehall > div > article > div.TextArticle__main___zH7wd > div.Stack__root___W5SPP.TextArticle__body___SZ6MK.Stack__gap-14___zt026.Stack__sm-gap-16___D6LK8 > div.InlineText__root___g8u-1"));
 
         for(WebElement breadtextPart : breadtextElements){
             breadtextBuilder.append(breadtextPart.getText());
@@ -81,7 +91,8 @@ public class SvtScraper {
 
         SvtArticle svtArticle = new SvtArticle(title, subtitle, breadtextBuilder.toString());
 
-        svtArticle.toString();
+        
+        Utils.debugg(svtArticle.toString(), debugging);
 
 
     }
